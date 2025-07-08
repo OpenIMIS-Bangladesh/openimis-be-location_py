@@ -371,30 +371,31 @@ class Location(core_models.VersionedModel, core_models.ExtendableModel):
                 LocationConfig.gql_mutation_create_region_locations_perms
             ) and not user.is_superuser
         ):
-            if user.is_officer:
-                from core.models import Officer
-
-                return (
-                    Officer.objects.filter(
-                        code=user.username, has_login=True, validity_to__isnull=True
-                    )
-                    .get()
-                    .officer_allowed_locations
-                )
-            elif user.is_claim_admin:
-                from core.models.user import ClaimAdmin
-
-                return (
-                    ClaimAdmin.objects.filter(
-                        code=user.username, has_login=True, validity_to__isnull=True
-                    )
-                    .get()
-                    .officer_allowed_locations
-                )
-            elif user.is_superuser:
-                return Location.objects
-            else:
-                return cls.objects.allowed(user.i_user_id, qs=True)
+            # if user.is_officer:
+            #     from core.models import Officer
+            #
+            #     return (
+            #         Officer.objects.filter(
+            #             code=user.username, has_login=True, validity_to__isnull=True
+            #         )
+            #         .get()
+            #         .officer_allowed_locations
+            #     )
+            # elif user.is_claim_admin:
+            #     from core.models.user import ClaimAdmin
+            #
+            #     return (
+            #         ClaimAdmin.objects.filter(
+            #             code=user.username, has_login=True, validity_to__isnull=True
+            #         )
+            #         .get()
+            #         .officer_allowed_locations
+            #     )
+            # elif user.is_superuser:
+            #     return Location.objects
+            # else:
+            #     return cls.objects.allowed(user.i_user_id, qs=True)
+            return Location.objects
         return queryset
 
     @staticmethod
