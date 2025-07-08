@@ -587,57 +587,62 @@ class UserDistrict(core_models.VersionedModel):
         :param user: InteractiveUser to filter on
         :return: UserDistrict *objects*
         """
-        if hasattr(user, "_u"):
-            user = user._u
-        cachedata = cache.get(f"user_districts_{user.id}")
+        # if hasattr(user, "_u"):
+        #     user = user._u
+        # cachedata = cache.get(f"user_districts_{user.id}")
         districts = []
-        if cachedata is None:
-            cache_location_if_not_cached()
-            cache_location_type = cache.get("location_types")
-            cachedata = []
-            if user.is_superuser:
-                for loc in cache_location_type['D']:
-                    cachedata.append([0, loc])
-            elif not isinstance(user, core_models.InteractiveUser):
-                if isinstance(user, core_models.TechnicalUser):
-                    logger.warning(
-                        f"get_user_districts called with a technical user `{user.username}`. "
-                        "We'll return an empty list, but it should be handled before reaching here."
-                    )
-            else:
-                districts = (
-                    UserDistrict.objects.filter(
-                        user=user,
-                        location__type="D",
-                        location__parent__isnull=False,
-                        *filter_validity(),
-                        *filter_validity(prefix="location__"),
-                    )
-                    .order_by("location__parent__code")
-                    .order_by("location__code")
-                )
-            for d in districts:
-                cachedata.append([d.id, d.location_id])
+        # if cachedata is None:
+        #     cache_location_if_not_cached()
+        #     cache_location_type = cache.get("location_types")
+        #     cachedata = []
+        #     if user.is_superuser:
+        #         for loc in cache_location_type['D']:
+        #             cachedata.append([0, loc])
+        #     elif not isinstance(user, core_models.InteractiveUser):
+        #         if isinstance(user, core_models.TechnicalUser):
+        #             logger.warning(
+        #                 f"get_user_districts called with a technical user `{user.username}`. "
+        #                 "We'll return an empty list, but it should be handled before reaching here."
+        #             )
+        #     else:
+        #         districts = (
+        #             UserDistrict.objects.filter(
+        #                 user=user,
+        #                 location__type="D",
+        #                 location__parent__isnull=False,
+        #                 *filter_validity(),
+        #                 *filter_validity(prefix="location__"),
+        #             )
+        #             .order_by("location__parent__code")
+        #             .order_by("location__code")
+        #         )
+        #     for d in districts:
+        #         cachedata.append([d.id, d.location_id])
+        #
+        #     cache.set(f"user_districts_{user.id}", cachedata)
+        #
+        # if not districts and cachedata:
+        #     missing_location_ids = set()
+        #     for d in cachedata:
+        #         location = cache.get(f"location_{d[1]}")
+        #         if not location:
+        #             logger.warning(f"district  {d[0]}:{d[1]} does not use a cached location")
+        #             missing_location_ids.add(d[1])
+        #         else:
+        #             if location.parent_id:
+        #                 location.parent = cache.get(f"location_{location.parent_id}")
+        #             districts.append(UserDistrict(id=d[0], user=user, location=location))
+        #
+        #     if missing_location_ids:
+        #         missing_locs = Location.objects.filter(id__in=missing_location_ids)
+        #         for loc in missing_locs:
+        #             cache.set(f"location_{loc.id}", loc, timeout=None)
+        #             districts.append(UserDistrict(id=0, user=user, location=loc))
 
-            cache.set(f"user_districts_{user.id}", cachedata)
 
-        if not districts and cachedata:
-            missing_location_ids = set()
-            for d in cachedata:
-                location = cache.get(f"location_{d[1]}")
-                if not location:
-                    logger.warning(f"district  {d[0]}:{d[1]} does not use a cached location")
-                    missing_location_ids.add(d[1])
-                else:
-                    if location.parent_id:
-                        location.parent = cache.get(f"location_{location.parent_id}")
-                    districts.append(UserDistrict(id=d[0], user=user, location=location))
-
-            if missing_location_ids:
-                missing_locs = Location.objects.filter(id__in=missing_location_ids)
-                for loc in missing_locs:
-                    cache.set(f"location_{loc.id}", loc, timeout=None)
-                    districts.append(UserDistrict(id=0, user=user, location=loc))
+        locations = Location.objects.filter(type="D")
+        for loc in locations:
+            districts.append(UserDistrict(id=loc.id, user=user, location=loc))
 
         return districts
 
