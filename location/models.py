@@ -395,7 +395,7 @@ class Location(core_models.VersionedModel, core_models.ExtendableModel):
             #     return Location.objects
             # else:
             #     return cls.objects.allowed(user.i_user_id, qs=True)
-            return Location.objects
+            return Location.objects.filter(validity_to__isnull=True)
         return queryset
 
     @staticmethod
