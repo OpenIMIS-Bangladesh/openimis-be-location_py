@@ -62,7 +62,7 @@ class CreateLocationMutation(CreateOrUpdateLocationMutation):
 
         if Location.objects.filter(
             code=data["code"], type=data["type"], validity_to=None
-        ).exists():
+        ).exists() and data["type"] != "O":
             raise ValidationError("Location with this code already exists.")
         try:
             return cls.do_mutate(
@@ -126,23 +126,35 @@ class DeleteLocationMutation(OpenIMISMutation):
             if not user.has_perms(LocationConfig.gql_mutation_delete_locations_perms):
                 raise PermissionDenied(_("unauthorized"))
             location = Location.objects.get(uuid=data["uuid"])
-            np_uuid = data.get("new_parent_uuid", None)
             from core import datetime
 
             now = datetime.datetime.now()
-            if np_uuid:
-                new_parent = Location.objects.get(uuid=np_uuid)
-                Location.objects.filter(parent=location).filter(
-                    *filter_validity()
-                ).update(parent=new_parent)
-            else:
-                tree_delete((location,), now)
+            if location.type == "O":
+                zip_code_w_id = location.zip_code_w_id
+                if zip_code_w_id:
+                    all_locations = Location.objects.filter(
+                        zip_code_w_id=zip_code_w_id
+                    ).filter(*filter_validity())
 
-            location.validity_to = now
-            location.save()
-            if location.type == "D":
-                cls.__delete_user_districts(location, now)
-            return None
+                    for loc in all_locations:
+                        loc.validity_to = now
+                        loc.save()
+            else:
+                np_uuid = data.get("new_parent_uuid", None)
+
+                if np_uuid:
+                    new_parent = Location.objects.get(uuid=np_uuid)
+                    Location.objects.filter(parent=location).filter(
+                        *filter_validity()
+                    ).update(parent=new_parent)
+                else:
+                    tree_delete((location,), now)
+
+                location.validity_to = now
+                location.save()
+                if location.type == "D":
+                    cls.__delete_user_districts(location, now)
+                return None
         except Exception as exc:
             return [
                 {
@@ -194,7 +206,8 @@ class MoveLocationMutation(OpenIMISMutation):
             location.save_history()
             level = LocationConfig.location_types.index(location.type)
             np_uuid = data.get("new_parent_uuid", None)
-            new_parent = Location.objects.get(uuid=np_uuid) if np_uuid else None
+            new_parent = Location.objects.get(
+                uuid=np_uuid) if np_uuid else None
             np_level = (
                 LocationConfig.location_types.index(new_parent.type)
                 if new_parent
@@ -256,7 +269,8 @@ class HealthFacilityInputType(OpenIMISMutation.Input):
     services_pricelist_id = graphene.Int(required=False)
     items_pricelist_id = graphene.Int(required=False)
     offline = graphene.Boolean(required=False)
-    catchments = graphene.List(HealthFacilityCatchmentInputType, required=False)
+    catchments = graphene.List(
+        HealthFacilityCatchmentInputType, required=False)
     contract_start_date = graphene.Date(required=False)
     contract_end_date = graphene.Date(required=False)
     status = graphene.String(required=False)

@@ -84,74 +84,144 @@ class LocationService:
         self.user = user
 
     @staticmethod
-    def check_unique_code(code):
-        if Location.objects.filter(code=code, validity_to__isnull=True).exists():
+    def check_unique_code(code, type=""):
+        if Location.objects.filter(code=code, validity_to__isnull=True).exists() and type != "O":
             return [{"message": "Location code %s already exists" % code}]
         return []
 
     def validate_data(self, **data):
         error = None
-        error = self.check_unique_code(data["code"])
+        error = self.check_unique_code(data["code"], data['type'])
 
         return error
 
     @register_service_signal("location_service.update_or_create")
     def update_or_create(self, data):
-        location_uuid = data.pop("uuid") if "uuid" in data else None
-        parent_uuid = data.pop("parent_uuid") if "parent_uuid" in data else None
+        location_uuid = data.pop("uuid", None)
+        parent_uuid = data.pop("parent_uuid", None)
+        incoming_type = data.get("type")
         incoming_code = data.get("code")
+
         current_location = Location.objects.filter(uuid=location_uuid).first()
         current_code = current_location.code if current_location else None
-        if current_code != incoming_code:
-            if self.check_unique_code(incoming_code):
-                raise ValidationError(_("mutation.location_code_duplicated"))
-        # update_or_create(uuid=location_uuid, ...)
-        # doesn't work because of explicit attempt to set null to uuid!
-        self._check_users_locations_rights(data["type"])
-        if location_uuid:
-            location = Location.objects.get(uuid=location_uuid)
-            self._reset_location_before_update(location)
-            [setattr(location, key, data[key]) for key in data]
-        else:
-            error = self.validate_data(**data)
-            if error:
-                raise ValueError(error)
+
+        if incoming_type != "O":
+            if current_code != incoming_code:
+                if self.check_unique_code(incoming_code):
+                    raise ValidationError(_("mutation.location_code_duplicated"))
+
+        # Get the zip_code_w_id Location instance once if parent_uuid is provided
+        zip_code_w_location = None
+        if parent_uuid:
+            try:
+                zip_code_w_location = Location.objects.get(uuid=parent_uuid)
+            except Location.DoesNotExist:
+                raise ValidationError(_("mutation.parent_location_not_found"))
+
+        # ---------- CASE 1: TYPE == "O" ----------
+        if incoming_type == "O":
+            if not location_uuid:
+                # CREATE new "O" under each existing "V"
+                v_locations = Location.objects.filter(type="V")
+                for v_loc in v_locations:
+                    new_data = data.copy()
+                    new_data["type"] = "O"
+                    new_data["parent"] = v_loc
+                    # ✅ correct assignment
+                    new_data["zip_code_w_id"] = zip_code_w_location
+                    new_data["uuid"] = None
+
+                    error = self.validate_data(**new_data)
+                    if error:
+                        raise ValueError(error)
+
+                    Location.objects.create(**new_data)
             else:
+                # UPDATE all "O" locations with matching zip_code_w_id
+                o_locations = Location.objects.filter(
+                    type="O", zip_code_w_id=zip_code_w_location)
+                for o_loc in o_locations:
+                    for key, value in data.items():
+                        setattr(o_loc, key, value)
+                    o_loc.save()
+
+        # ---------- CASE 2: TYPE == "V" ----------
+        elif incoming_type == "V":
+            if location_uuid:
+                location = Location.objects.get(uuid=location_uuid)
+                self._reset_location_before_update(location)
+                for key, value in data.items():
+                    setattr(location, key, value)
+            else:
+                error = self.validate_data(**data)
+                if error:
+                    raise ValueError(error)
                 location = Location.objects.create(**data)
 
-        if parent_uuid:
-            location.parent = Location.objects.get(uuid=parent_uuid)
-        location.save()
-        self._ensure_user_belongs_to_district(location)
+            if parent_uuid:
+                location.parent = zip_code_w_location
+            location.save()
 
-    def _check_users_locations_rights(self, loc_type):
-        if self.user.is_superuser or self.user.has_perms(
-            LocationConfig.gql_mutation_create_region_locations_perms
-        ):
-            pass
-        elif loc_type in ["R", "D"]:
-            raise PermissionDenied(_("unauthorized_to_create_update_region_district"))
-        elif not self.user.has_perms(
-            LocationConfig.gql_mutation_create_locations_perms
-        ):
-            raise PermissionDenied(
-                _("unauthorized_to_create_or_update_municipalities_and_villages")
-            )
+            # CREATE associated O locations
+            o_templates = Location.objects.filter(
+                type="O", zip_code_w_id=zip_code_w_location)
+            for o_template in o_templates:
+                new_o_data = {
+                    field.name: getattr(o_template, field.name)
+                    for field in Location._meta.fields
+                    if field.name not in ("id", "uuid", "parent")
+                }
+                new_o_data["type"] = "O"
+                new_o_data["parent"] = location
+                new_o_data["zip_code_w_id"] = zip_code_w_location
+                Location.objects.create(**new_o_data)
 
-    @staticmethod
-    def _reset_location_before_update(location):
-        location.male_population = None
-        location.female_population = None
-        location.other_population = None
-        location.families = None
+        # ---------- CASE 3: Other types ----------
+        else:
+            if location_uuid:
+                location = Location.objects.get(uuid=location_uuid)
+                self._reset_location_before_update(location)
+                for key, value in data.items():
+                    setattr(location, key, value)
+            else:
+                error = self.validate_data(**data)
+                if error:
+                    raise ValueError(error)
+                location = Location.objects.create(**data)
 
-    def _ensure_user_belongs_to_district(self, location: Location):
-        if location.type == "D":
-            UserDistrict.objects.get_or_create(
-                user=self.user.i_user,
-                location=location,
-                audit_user_id=self.user.id_for_audit,
-            )
+            if parent_uuid:
+                location.parent = zip_code_w_location
+            location.save()
+
+        def _check_users_locations_rights(self, loc_type):
+            if self.user.is_superuser or self.user.has_perms(
+                LocationConfig.gql_mutation_create_region_locations_perms
+            ):
+                pass
+            elif loc_type in ["R", "D"]:
+                raise PermissionDenied(
+                    _("unauthorized_to_create_update_region_district"))
+            elif not self.user.has_perms(
+                LocationConfig.gql_mutation_create_locations_perms
+            ):
+                raise PermissionDenied(
+                    _("unauthorized_to_create_or_update_municipalities_and_villages")
+                )
+
+        @staticmethod
+        def _reset_location_before_update(location):
+            location.male_population = None
+            location.female_population = None
+            location.other_population = None
+            location.families = None
+
+        def _ensure_user_belongs_to_district(self, location: Location):
+            if location.type == "D":
+                UserDistrict.objects.get_or_create(
+                    user=self.user.i_user,
+                    location=location,
+                    audit_user_id=self.user.id_for_audit,
+                )
 
 
 class HealthFacilityService:
@@ -176,7 +246,8 @@ class HealthFacilityService:
         if (
             contract_start_date and contract_end_date and contract_end_date <= contract_start_date
         ):
-            raise ValidationError(_("mutation.incorrect_hf_contract_date_range"))
+            raise ValidationError(
+                _("mutation.incorrect_hf_contract_date_range"))
         if (
             "status" in data and data["status"] not in HealthFacility.HealthFacilityStatus
         ):
@@ -210,7 +281,8 @@ class HealthFacilityService:
             catchment_id = catchment.pop("id") if "id" in catchment else None
             if catchment_id:
                 prev_catchments.remove(catchment_id)
-                prev_catchment = catchments.filter(id=catchment_id, **catchment).first()
+                prev_catchment = catchments.filter(
+                    id=catchment_id, **catchment).first()
                 if not prev_catchment:
                     # catchment has been updated, let's bind the old value to prev_hf
                     prev_catchment = catchments.get(id=catchment_id)

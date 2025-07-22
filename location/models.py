@@ -352,6 +352,15 @@ class Location(core_models.VersionedModel, core_models.ExtendableModel):
     # rowid = models.TextField(db_column='RowId')
     audit_user_id = models.IntegerField(db_column="AuditUserId", blank=True, null=True)
 
+    zip_code_w_id =  models.ForeignKey(
+        "Location",
+        models.DO_NOTHING,
+        db_column="wCodeId",
+        blank=True,
+        null=True,
+        related_name="zip",
+    )
+
     def __str__(self):
         return self.code + " " + self.name
 
