@@ -17,6 +17,7 @@ from location.models import (
     HealthFacilityCatchment,
     UserDistrict,
 )
+from django.db import transaction
 
 
 def check_authentication(function):
@@ -150,12 +151,35 @@ class LocationService:
                 location.parent = zip_code_w_location
             location.save()
 
-            # CREATE associated O locations (only for O templates whose V parent is under given parent)
+            # # CREATE associated O locations (only for O templates whose V parent is under given parent)
+            # o_templates = Location.objects.filter(
+            #     type="O",
+            #     zip_code_w_id=zip_code_w_location,
+            #     parent__parent=zip_code_w_location,  # ensures V's parent is the same as incoming parent
+            # )
+
+            # for o_template in o_templates:
+            #     new_o_data = {
+            #         field.name: getattr(o_template, field.name)
+            #         for field in Location._meta.fields
+            #         if field.name not in ("id", "uuid", "parent")
+            #     }
+            #     new_o_data["type"] = "O"
+            #     new_o_data["parent"] = location
+            #     new_o_data["zip_code_w_id"] = zip_code_w_location
+            #     Location.objects.create(**new_o_data)
+
+            CHUNK_SIZE = 50  # You can tune this depending on your DB performance
+
+            # Step 1: Filter the O templates
             o_templates = Location.objects.filter(
                 type="O",
                 zip_code_w_id=zip_code_w_location,
-                parent__parent=zip_code_w_location,  # ensures V's parent is the same as incoming parent
-            )
+                parent__parent=zip_code_w_location,
+            ).distinct()
+
+            # Step 2: Prepare the new O instances (do not save yet)
+            new_o_locations = []
 
             for o_template in o_templates:
                 new_o_data = {
@@ -166,7 +190,13 @@ class LocationService:
                 new_o_data["type"] = "O"
                 new_o_data["parent"] = location
                 new_o_data["zip_code_w_id"] = zip_code_w_location
-                Location.objects.create(**new_o_data)
+
+                new_o_locations.append(Location(**new_o_data))
+
+            # Step 3: Bulk insert in chunks
+            with transaction.atomic():
+                for i in range(0, len(new_o_locations), CHUNK_SIZE):
+                    Location.objects.bulk_create(new_o_locations[i:i + CHUNK_SIZE])
 
         # ---------- CASE 3: Other types ----------
         else:
