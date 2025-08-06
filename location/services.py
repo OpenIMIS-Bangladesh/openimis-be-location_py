@@ -9,6 +9,7 @@ from django.db.models import Q
 from django.utils.translation import gettext as _
 
 from core.signals import register_service_signal
+from core.utils import filter_validity
 from location.apps import LocationConfig
 from location.models import (
     Location,
@@ -156,13 +157,7 @@ class LocationService:
                 parent__parent=zip_code_w_location,  # ensures V's parent is the same as incoming parent
             )
 
-            used_zip_ids = set()
             for o_template in o_templates:
-                zip_id = o_template.zip_code_w_id_id
-                if zip_id in used_zip_ids:
-                    continue
-                used_zip_ids.add(zip_id)
-
                 new_o_data = {
                     field.name: getattr(o_template, field.name)
                     for field in Location._meta.fields
