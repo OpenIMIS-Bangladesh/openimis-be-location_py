@@ -126,8 +126,8 @@ class Query(graphene.ObjectType):
         return Location.objects.filter(*filter_validity()).all()
 
     def resolve_locations_str(self, info, **kwargs):
-        if info.context.user.is_anonymous:
-            raise PermissionDenied(_("unauthorized"))
+        # if info.context.user.is_anonymous:
+        #     raise PermissionDenied(_("unauthorized"))
 
         queryset = Location.get_queryset(None, info.context.user)
         filters = [*filter_validity(**kwargs)]

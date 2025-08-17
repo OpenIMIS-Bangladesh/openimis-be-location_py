@@ -650,7 +650,7 @@ class UserDistrict(core_models.VersionedModel):
         #             districts.append(UserDistrict(id=0, user=user, location=loc))
 
 
-        locations = Location.objects.filter(type="D").filter(*filter_validity()).order_by("code")
+        locations = Location.objects.filter(type="D").filter(*filter_validity())
         for loc in locations:
             districts.append(UserDistrict(id=loc.id, user=user, location=loc))
 
