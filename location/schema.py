@@ -166,15 +166,15 @@ class Query(graphene.ObjectType):
         return HealthFacility.objects.filter(*filters)
 
     def resolve_user_districts(self, info, **kwargs):
-        if info.context.user.is_anonymous:
-            raise PermissionDenied(_("unauthorized"))
-        if not isinstance(info.context.user._u, core_models.InteractiveUser):
-            raise NotImplementedError(
-                "Only Interactive Users are registered for districts"
-            )
+        # if info.context.user.is_anonymous:
+        #     raise PermissionDenied(_("unauthorized"))
+        # if not isinstance(info.context.user._u, core_models.InteractiveUser):
+        #     raise NotImplementedError(
+        #         "Only Interactive Users are registered for districts"
+        #     )
         return [
             UserDistrictGQLType(d)
-            for d in UserDistrict.get_user_districts(info.context.user._u)
+            for d in UserDistrict.get_user_districts()
         ]
 
     def resolve_officer_locations(self, info, **kwargs):

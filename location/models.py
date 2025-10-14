@@ -370,8 +370,8 @@ class Location(core_models.VersionedModel, core_models.ExtendableModel):
         # GraphQL calls with an info object while Rest calls with the user itself
         if isinstance(user, ResolveInfo):
             user = user.context.user
-        if settings.ROW_SECURITY and user.is_anonymous:
-            return queryset.filter(id=-1)
+        # if settings.ROW_SECURITY and user.is_anonymous:
+        #     return queryset.filter(id=-1)
 
         # OMT-280: if you create a new region and your user has district limitations, you won't find what you
         # just created. So we'll consider that if you were allowed to create it, you are also allowed to retrieve it.
@@ -591,7 +591,7 @@ class UserDistrict(core_models.VersionedModel):
         db_table = "tblUsersDistricts"
 
     @classmethod
-    def get_user_districts(cls, user):
+    def get_user_districts(cls, user=None):
         """
         Retrieve the list of UserDistricts for a user, the locations are prefetched on two levels.
         :param user: InteractiveUser to filter on
