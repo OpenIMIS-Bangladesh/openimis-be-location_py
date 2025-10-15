@@ -23,8 +23,8 @@ class LocationGQLType(DjangoObjectType):
     Field.register_lookup(NotEqual)
 
     def resolve_parent(self, info):
-        if not info.context.user.is_authenticated:
-            raise PermissionDenied(_("unauthorized"))
+        # if not info.context.user.is_authenticated:
+        #     raise PermissionDenied(_("unauthorized"))
         if "location_loader" in info.context.dataloaders and self.parent_id:
             return info.context.dataloaders["location_loader"].load(self.parent_id)
         return self.parent

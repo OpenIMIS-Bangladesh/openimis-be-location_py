@@ -367,44 +367,6 @@ class Location(core_models.VersionedModel, core_models.ExtendableModel):
     @classmethod
     def get_queryset(cls, queryset, user):
         queryset = cls.filter_queryset(queryset)
-        # GraphQL calls with an info object while Rest calls with the user itself
-        if isinstance(user, ResolveInfo):
-            user = user.context.user
-        # if settings.ROW_SECURITY and user.is_anonymous:
-        #     return queryset.filter(id=-1)
-
-        # OMT-280: if you create a new region and your user has district limitations, you won't find what you
-        # just created. So we'll consider that if you were allowed to create it, you are also allowed to retrieve it.
-        if (
-            settings.ROW_SECURITY and not user.has_perms(
-                LocationConfig.gql_mutation_create_region_locations_perms
-            ) and not user.is_superuser
-        ):
-            # if user.is_officer:
-            #     from core.models import Officer
-            #
-            #     return (
-            #         Officer.objects.filter(
-            #             code=user.username, has_login=True, validity_to__isnull=True
-            #         )
-            #         .get()
-            #         .officer_allowed_locations
-            #     )
-            # elif user.is_claim_admin:
-            #     from core.models.user import ClaimAdmin
-            #
-            #     return (
-            #         ClaimAdmin.objects.filter(
-            #             code=user.username, has_login=True, validity_to__isnull=True
-            #         )
-            #         .get()
-            #         .officer_allowed_locations
-            #     )
-            # elif user.is_superuser:
-            #     return Location.objects
-            # else:
-            #     return cls.objects.allowed(user.i_user_id, qs=True)
-            return Location.objects.filter(validity_to__isnull=True)
         return queryset
 
     @staticmethod
